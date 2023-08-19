@@ -1,8 +1,10 @@
 import { prismaClient } from "../application/database.js";
 import { ResponseError } from "../error/response-error.js";
 import {
+  getUserValidation,
   loginUserValidation,
   registerUserValidation,
+  updateUserValidation,
 } from "../validation/user-validation.js";
 import { validate } from "../validation/validation.js";
 import bcrypt from "bcrypt";
@@ -76,7 +78,81 @@ const login = async (request) => {
   });
 };
 
+const getUser = async (username) => {
+  username = validate(getUserValidation, username);
+
+  const user = prismaClient.user.findUnique({
+    where: {
+      username: username,
+    },
+    select: {
+      username: true,
+      name: true,
+    },
+  });
+
+  if (!user) {
+    throw new ResponseError(404, "user is not found");
+  }
+
+  return user;
+};
+
+const updatetUser = async (request) => {
+  const userFromValidation = validate(updateUserValidation, request);
+  const totalUserInDatabase = await prismaClient.user.count({
+    where: {
+      username: userFromValidation.username,
+    },
+  });
+  if (totalUserInDatabase !== 1) {
+    throw new ResponseError(404, "user is not found");
+  }
+  const dataUpdate = {};
+  if (userFromValidation.name) {
+    dataUpdate.name = userFromValidation.name;
+  }
+  if (userFromValidation.password) {
+    dataUpdate.password = await bcrypt.hash(userFromValidation.password, 10);
+  }
+
+  return prismaClient.user.update({
+    where: { username: userFromValidation.username },
+    data: dataUpdate,
+    select: {
+      username: true,
+      name: true,
+    },
+  });
+};
+
+const logout = async (username) => {
+  username = validate(getUserValidation, username);
+  const user = await prismaClient.user.findUnique({
+    where: {
+      username: username,
+    },
+  });
+  if (!user) {
+    throw new ResponseError(404, "user is not found");
+  }
+  return prismaClient.user.update({
+    where: {
+      username: username,
+    },
+    data: {
+      token: null,
+    },
+    select: {
+      username: true,
+    },
+  });
+};
+
 export default {
   register,
   login,
+  getUser,
+  updatetUser,
+  logout,
 };
